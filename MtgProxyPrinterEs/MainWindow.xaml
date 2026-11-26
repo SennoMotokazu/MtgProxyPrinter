@@ -288,6 +288,7 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="{DynamicResource PreviewHeader}"
@@ -315,7 +316,12 @@
                                Margin="0,2,0,0"/>
                 </StackPanel>
 
-                <Button Grid.Row="3" Content="{DynamicResource GeneratePdf}"
+                <CheckBox Grid.Row="3" Content="Include Back Faces"
+                          IsChecked="{Binding IncludeBackFaces}"
+                          Foreground="White"
+                          Margin="0,0,0,8"/>
+
+                <Button Grid.Row="4" Content="{DynamicResource GeneratePdf}"
                         Margin="0,12,0,0"
                         Style="{StaticResource PrimaryButton}"
                         Command="{Binding GeneratePdfCommand}"

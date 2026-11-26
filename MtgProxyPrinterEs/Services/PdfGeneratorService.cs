@@ -39,10 +39,12 @@ namespace MtgProxyPrinterEs.Services
         /// </summary>
         /// <param name="deck">List of deck entries with selected printings.</param>
         /// <param name="outputPath">Full file path where the PDF will be saved.</param>
+        /// <param name="includeBackFaces">Whether to print back face image of double-faced cards.</param>
         /// <param name="progress">Optional progress reporter: (current, total, message).</param>
         public async Task GeneratePdfAsync(
             List<DeckEntry> deck,
             string outputPath,
+            bool includeBackFaces,
             IProgress<(int current, int total, string message)>? progress = null)
         {
             var document = new PdfDocument();
@@ -62,8 +64,14 @@ namespace MtgProxyPrinterEs.Services
             PdfPage? currentPage = null;
             XGraphics? gfx = null;
 
-            int cardIndex = 0;
+            int totalFaces = deck.Sum(e =>
+            {
+                if (e.SelectedPrint?.CardFaces?.Count > 1 && includeBackFaces)
+                    return e.Quantity * 2;
+                return e.Quantity;
+            });
             int totalCards = deck.Sum(e => e.Quantity);
+            int faceIndex = 0;
             int processed = 0;
 
             foreach (var entry in deck)
@@ -76,38 +84,20 @@ namespace MtgProxyPrinterEs.Services
                 var imageBytes = await GetCardImageAsync(entry.SelectedPrint);
                 if (imageBytes == null) continue;
 
-                // Place one slot per copy of the card
+                byte[]? backBytes = null;
+                if (entry.SelectedPrint?.CardFaces?.Count > 1 && includeBackFaces)
+                    backBytes = await GetCardImageAsync(entry.SelectedPrint, true);
+
+                // Place one slot per copy of the card face
                 for (int i = 0; i < entry.Quantity; i++)
                 {
-                    int posInPage = cardIndex % 9;
-
-                    // Start a new page every 9 cards
-                    if (posInPage == 0)
-                    {
-                        gfx?.Dispose();
-                        currentPage = document.AddPage();
-                        currentPage.Width = pageW;
-                        currentPage.Height = pageH;
-                        gfx = XGraphics.FromPdfPage(currentPage);
-                    }
-
-                    // Calculate grid position (col 0-2, row 0-2)
-                    int col = posInPage % 3;
-                    int row = posInPage / 3;
-
-                    double x = marginX + col * cardW;
-                    double y = marginY + row * cardH;
-
-                    // Draw the card image
-                    using var ms = new MemoryStream(imageBytes);
-                    var xImage = XImage.FromStream(ms);
-                    gfx!.DrawImage(xImage, x, y, cardW, cardH);
-
-                    // Draw light gray cut lines around each card
-                    var pen = new XPen(XColors.LightGray, 0.5);
-                    gfx.DrawRectangle(pen, x, y, cardW, cardH);
-
-                    cardIndex++;
+                    DrawCard(imageBytes, document,
+                        ref currentPage, ref gfx, ref faceIndex,
+                        pageW, pageH, cardW, cardH, marginX, marginY);
+                    if (backBytes != null)
+                        DrawCard(backBytes, document,
+                            ref currentPage, ref gfx, ref faceIndex,
+                            pageW, pageH, cardW, cardH, marginX, marginY);
                     processed++;
                     progress?.Report((processed, totalCards, $"{entry.CardName} ({processed}/{totalCards})"));
                 }
@@ -117,28 +107,65 @@ namespace MtgProxyPrinterEs.Services
             document.Save(outputPath);
         }
 
+        private static void DrawCard(byte[] imageBytes, PdfDocument document,
+            ref PdfPage? currentPage, ref XGraphics? gfx, ref int faceIndex,
+            double pageW, double pageH, double cardW, double cardH, double marginX, double marginY)
+        {
+            int posInPage = faceIndex % 9;
+
+            // Start a new page every 9 cards
+            if (posInPage == 0)
+            {
+                gfx?.Dispose();
+                currentPage = document.AddPage();
+                currentPage.Width = pageW;
+                currentPage.Height = pageH;
+                gfx = XGraphics.FromPdfPage(currentPage);
+            }
+
+            // Calculate grid position (col 0-2, row 0-2)
+            int col = posInPage % 3;
+            int row = posInPage / 3;
+
+            double x = marginX + col * cardW;
+            double y = marginY + row * cardH;
+
+            // Draw the card image
+            using var ms = new MemoryStream(imageBytes);
+            var xImage = XImage.FromStream(ms);
+            gfx!.DrawImage(xImage, x, y, cardW, cardH);
+
+            // Draw light gray cut lines around each card
+            var pen = new XPen(XColors.LightGray, 0.5);
+            gfx.DrawRectangle(pen, x, y, cardW, cardH);
+
+            faceIndex++;
+        }
+
         /// <summary>
         /// Returns the image bytes for a card, using the local cache when available.
-        /// Cache file name format: {Name}_{Set}_{CollectorNumber}_{Lang}.jpg
+        /// Cache file name format: {Name}_{Set}_{CollectorNumber}_{Lang}[_back].jpg
         /// If not cached, downloads from Scryfall and saves to the cache folder.
         /// </summary>
-        private async Task<byte[]?> GetCardImageAsync(ScryfallCard card)
+        private async Task<byte[]?> GetCardImageAsync(ScryfallCard card, bool backFace = false)
         {
             var safeName = MakeSafeFileName($"{card.Name}_{card.Set}_{card.CollectorNumber}_{card.Lang}");
-            var cachePath = Path.Combine(_cacheFolder, safeName + ".jpg");
+            string suffixBF = backFace ? "_back" : "";
+            var cachePath = Path.Combine(_cacheFolder, safeName + suffixBF + ".jpg");
 
             // Return cached image if it exists
             if (File.Exists(cachePath))
                 return await File.ReadAllBytesAsync(cachePath);
 
             // Download from Scryfall and cache it
-            var url = card.GetImageUrl("large");
+            var url = backFace ? card.GetBackFaceUrl("large") : card.GetImageUrl("large");
             if (url == null) return null;
 
             var bytes = await _scryfall.DownloadImageAsync(url);
-            if (bytes != null)
-                await File.WriteAllBytesAsync(cachePath, bytes);
+            if (bytes == null || bytes.Length == 0)
+                return null;
 
+            await File.WriteAllBytesAsync(cachePath, bytes);
             return bytes;
         }
 

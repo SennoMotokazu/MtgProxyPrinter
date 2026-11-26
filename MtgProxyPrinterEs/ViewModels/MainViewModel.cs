@@ -56,6 +56,9 @@ namespace MtgProxyPrinterEs.ViewModels
         /// <summary>Currently selected entry in the deck list. Drives the preview panel.</summary>
         [ObservableProperty] private DeckEntry? _selectedEntry;
 
+        /// <summary>Whether to print back face image of double-faced cards.</summary>
+        [ObservableProperty] private bool _includeBackFaces = false;
+
         /// <summary>
         /// Preferred card language for Scryfall searches (e.g. "es", "en", "ja").
         /// Used when searching cards — tries this language first, then falls back to English.
@@ -261,7 +264,7 @@ namespace MtgProxyPrinterEs.ViewModels
 
             try
             {
-                await _pdfGenerator.GeneratePdfAsync(readyEntries, dialog.FileName, progress);
+                await _pdfGenerator.GeneratePdfAsync(readyEntries, dialog.FileName, IncludeBackFaces, progress);
                 StatusMessage = $"PDF generated: {dialog.FileName}";
 
                 // Offer to open the generated PDF immediately

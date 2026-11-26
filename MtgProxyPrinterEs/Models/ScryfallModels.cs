@@ -93,6 +93,25 @@ namespace MtgProxyPrinterEs.Models
 
             return null;
         }
+
+        /// <summary>
+        /// Returns the back-face image URL for the requested size ("normal" or "large").
+        /// Returns null if it is single-faced card or no image is available.
+        /// </summary>
+        public string? GetBackFaceUrl(string size = "large")
+        {
+            if (CardFaces?.Count < 2)
+                return null;
+
+            var backFace = CardFaces[1];
+
+            if (backFace.ImageUris == null)
+                return null;
+
+            return size == "normal"
+                ? backFace.ImageUris.Normal
+                : backFace.ImageUris.Large;
+        }
     }
 
     /// <summary>
