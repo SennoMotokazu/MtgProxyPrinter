@@ -94,9 +94,25 @@ namespace MtgProxyPrinterEs
 
             LangFilter.ItemsSource = languages;
 
-            LangFilter.SelectedItem = currentSelection != null && languages.Contains(currentSelection)
-                ? currentSelection
-                : "All";
+            if (currentSelection != null &&
+                languages.Contains(currentSelection))
+            {
+                LangFilter.SelectedItem =
+                    currentSelection;
+            }
+            else if (_entry.SelectedPrint != null &&
+                    !string.IsNullOrWhiteSpace(
+                        _entry.SelectedPrint.Lang) &&
+                    languages.Contains(
+                        _entry.SelectedPrint.Lang))
+            {
+                LangFilter.SelectedItem =
+                    _entry.SelectedPrint.Lang;
+            }
+            else
+            {
+                LangFilter.SelectedItem = "All";
+            }
 
             LangFilter.SelectionChanged += LangFilter_SelectionChanged;
 
